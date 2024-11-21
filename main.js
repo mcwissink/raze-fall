@@ -41,8 +41,8 @@ class HitEffect {
             const easedValue = easeOut(1 - this.animation / HitEffect.ANIMATION_DURATION, 2);
             ctx.save();
             ctx.translate(this.position.x, this.position.y);
-            ctx.scale(Math.sign(this.velocity.x), 1)
-            ctx.lineWidth = 10 * (1 - easedValue);
+            ctx.scale(Math.sign(this.velocity.x || 1), 1)
+            ctx.lineWidth = 50 * (1 - easedValue);
             ctx.setLineDash([100 * (1 - easedValue), 100 * easedValue]);
             ctx.strokeStyle = this.color;
             ctx.beginPath();
@@ -53,16 +53,56 @@ class HitEffect {
     }
 }
 
+class ScoreEffect {
+    position = new Vector(0, 0);
+    static ANIMATION_DURATION = 30;
+    animation = 0;
+
+    spawn(position) {
+        this.position = position;
+        this.animation = ScoreEffect.ANIMATION_DURATION;
+    }
+
+    render(ctx) {
+        if (this.animation) {
+            this.animation -= 1;
+            ctx.save();
+            ctx.translate(this.position.x, this.position.y + easeOut(this.animation / ScoreEffect.ANIMATION_DURATION, 2) * 10);
+            ctx.beginPath();
+            ctx.fillStyle = 'white';
+            ctx.strokeStyle = 'black';
+            ctx.arc(0, 0, 10, 0, 2 * Math.PI);
+            ctx.fill();
+            ctx.stroke();
+            ctx.fillStyle = 'black';
+            ctx.fillText('+1', -5, 3);
+            ctx.restore();
+        }
+    }
+}
+
 class Spike {
+    scored = false;
     position = new Vector(0, 0);
     velocity = new Vector(0, 5);
     radius = 20;
     friction = 0.8;
 
+    static MAX_SPAWN_VELOCITY = 10;
+    static MAX_RADIUS = 40;
+    static MIN_RADIUS = 10;
     static ANIMATION_DURATION = 50;
     animation = 0;
     color = 'red';
 
+    reset() {
+        this.scored = false;
+        this.animation = 0;
+        this.radius = Spike.MIN_RADIUS + Math.random() * (Spike.MAX_RADIUS - Spike.MIN_RADIUS);
+        this.position.x = Math.random() * CANVAS.width;
+        this.position.y = -this.radius;
+        this.velocity.y = Math.random() * Spike.MAX_SPAWN_VELOCITY;
+    }
 
     hit(color) {
         this.animation = Spike.ANIMATION_DURATION;
@@ -76,8 +116,10 @@ class Spike {
     }
 
     render(ctx) {
+        ctx.save();
         if (this.animation) {
             this.animation -= 1;
+            ctx.strokeStyle = this.color;
         }
 
         const gradient = ctx.createRadialGradient(
@@ -96,6 +138,7 @@ class Spike {
         ctx.fillStyle = gradient;
         ctx.fill();
         ctx.stroke();
+        ctx.restore();
     }
 }
 
@@ -134,32 +177,79 @@ class Player {
 }
 
 class Controller {
-    static MAP = {
-        'ArrowLeft': -1,
-        'ArrowRight': 1,
+    static CONFIG = {
+        'ArrowLeft': 'left',
+        'ArrowRight': 'right',
     }
-    stickX
+    left = false;
+    right = false;
+    stickX = 0;
     key(key, down) {
-        this.stickX = down ? Controller.MAP[key] : 0;
+        const mappedKey = Controller.CONFIG[key]
+        this[mappedKey] = down;
+        if (down) {
+            this.stickX = mappedKey === 'left' ? -1 : 1;
+        } else if (this.left) {
+            this.stickX = -1;
+        } else if (this.right) {
+            this.stickX = 1;
+        } else {
+            this.stickX = 0;
+        }
+    }
+}
+
+class Pool {
+    active = []
+    inactive = []
+    constructor(entity, size) {
+        this.size = size;
+        this.entity = entity;
+    }
+    activate() {
+        if (this.inactive.length) {
+            const entity = this.inactive.pop();
+            entity.reset();
+            this.active.push(entity);
+        } else if (this.active.length + this.inactive.length < this.size) {
+            const entity = new this.entity()
+            entity.reset()
+            this.active.push(entity);
+        }
+    }
+
+    deactivate(entity) {
+        const index = this.active.findIndex((e) => e === entity);
+        this.active.splice(index, 1);
+        this.inactive.push(entity);
     }
 }
 
 class Game {
     previousTime = 0;
+    frameCount = 0;
     target = new Vector(0, 0);
     controller = new Controller();
     player = new Player(new Vector(250, 250));
-    spikes = [
-        new Spike(),
-        new Spike(),
-        new Spike(),
-        new Spike(),
-    ];
+    spikePool = new Pool(Spike, 20);
+    gameOver = false;
     hitEffectsCooldown = 0;
     hitEffects = [
         new HitEffect(),
         new HitEffect(),
         new HitEffect(),
+    ];
+    deathEffects = [
+        new HitEffect(),
+        new HitEffect(),
+        new HitEffect(),
+        new HitEffect(),
+        new HitEffect(),
+    ];
+    scoreEffects = [
+        new ScoreEffect(),
+        new ScoreEffect(),
+        new ScoreEffect(),
     ];
 
     constructor() {
@@ -177,7 +267,7 @@ class Game {
         while (time - frameInterval > this.previousTime) {
             this.previousTime += frameInterval;
 
-            this.update();
+            this.update(time);
             CTX.fillStyle = "rgba(255, 255, 255, 1)";
             CTX.fillRect(0, 0, CANVAS.width, CANVAS.height);
             this.render(CTX);
@@ -187,6 +277,11 @@ class Game {
     }
 
     update() {
+        this.frameCount++;
+        if (this.frameCount % 10 === 0) {
+            this.spikePool.activate();
+        }
+
         this.target.x = this.player.position.x;
         if (this.controller.stickX) {
             this.target.x = this.player.position.x + (100 * this.controller.stickX);
@@ -197,7 +292,7 @@ class Game {
             this.hitEffectsCooldown -= 1;
         }
 
-        this.spikes.forEach((spike) => {
+        this.spikePool.active.forEach((spike) => {
             spike.update()
 
             const dx = (spike.position.x - this.player.position.x);
@@ -213,14 +308,23 @@ class Game {
                 spike.velocity.x += Math.cos(angle) * force * 0.1;
                 spike.velocity.y += Math.sin(angle) * force * 0.1;
 
-                const color = playerVelocityY < 0 ? 'green' : 'red';
+                const hitPosition = new Vector(this.player.position.x + dx / 2, this.player.position.y + dy / 2);
+                const isPositiveHit = playerVelocityY < 0;
+                const color = isPositiveHit ? 'green' : 'red';
                 spike.hit(color);
+
+                if (isPositiveHit && !spike.scored) {
+                    spike.scored = true;
+                    const scoreEffect = this.scoreEffects.shift();
+                    scoreEffect.spawn(hitPosition);
+                    this.scoreEffects.push(scoreEffect);
+                }
 
                 const strength = Math.abs(playerVelocityY) * 10;
                 if (strength > this.hitEffectsCooldown) {
                     const hitEffect = this.hitEffects.shift();
                     hitEffect.spawn(
-                        new Vector(this.player.position.x + dx / 2, this.player.position.y + dy / 2),
+                        hitPosition,
                         new Vector(this.player.velocity.x, this.player.velocity.y),
                         color,
                         strength
@@ -230,20 +334,49 @@ class Game {
                 }
             }
 
-            if (spike.position.y - spike.radius > CANVAS.height) {
-                spike.position.x = Math.random() * CANVAS.width;
-                spike.position.y = -spike.radius;
+            if (spike.position.y - spike.radius > CANVAS.height + 10) {
+                this.spikePool.deactivate(spike);
+            }
+
+            if (spike.position.y + spike.radius < -10) {
+                this.spikePool.deactivate(spike);
             }
         });
 
         this.player.update();
+
+        if (this.player.position.x + this.player.radius > CANVAS.width) {
+            this.player.position.x = CANVAS.width - this.player.radius;
+            this.player.velocity.x *= -1;
+        }
+
+        if (this.player.position.x - this.player.radius < 0) {
+            this.player.position.x = this.player.radius;
+            this.player.velocity.x *= -1;
+        }
+
+        if (!this.gameOver && this.player.position.y - this.player.radius > CANVAS.height) {
+            this.gameOver = true;
+            this.deathEffects.forEach((deathEffect, index) => {
+                deathEffect.spawn(
+                    new Vector(this.player.position.x, this.player.position.y),
+                    new Vector(0, 0),
+                    'black',
+                    50 * index,
+                );
+            });
+        }
+
         this.hitEffects.forEach((hitEffect) => hitEffect.update());
+        this.deathEffects.forEach((deathEffect) => deathEffect.update());
     }
 
     render(ctx) {
         this.hitEffects.forEach((hitEffect) => hitEffect.render(ctx));
+        this.deathEffects.forEach((deathEffects) => deathEffects.render(ctx));
         this.player.render(ctx);
-        this.spikes.forEach((spike) => spike.render(ctx));
+        this.spikePool.active.forEach((spike) => spike.render(ctx));
+        this.scoreEffects.forEach((scoreEffect) => scoreEffect.render(ctx));
     }
 }
 
