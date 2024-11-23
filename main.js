@@ -252,7 +252,7 @@ class Controller {
     mouseX = 0;
     constructor() {
         window.addEventListener('mousemove', (e) => this.mouseMove(e.clientX - CANVAS.getBoundingClientRect().x));
-        window.addEventListener('touchmove', (e) => this.mouseMove(e.clientX - CANVAS.getBoundingClientRect().x));
+        window.addEventListener('touchmove', (e) => this.mouseMove(e.touches[0].clientX - CANVAS.getBoundingClientRect().x));
         window.addEventListener('keydown', (e) => this.key(e.key, true));
         window.addEventListener('keyup', (e) => this.key(e.key, false));
     }
