@@ -3,6 +3,27 @@ const CTX = CANVAS.getContext('2d');
 
 const easeOut = (t, exponent = 5) => 1 - Math.pow(1 - t, exponent);
 
+const collide = (entityA, entityB, ratio) => {
+    const dx = entityA.position.x - entityB.position.x;
+    const dy = entityA.position.y - entityB.position.y;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+
+    if (distance < entityA.radius + entityB.radius) {
+        const force = (entityA.radius + entityB.radius) - distance;
+        const angle = Math.atan2(dy, dx);
+        entityA.veloctiy.x += Math.cos(angle) * force * ratio;
+        entityA.velocity.y += Math.sin(angle) * force * ratio;
+        entityB.velocity.x += -1 * Math.cos(angle) * force * (1 - ratio);
+        entityB.velocity.y += -1 * Math.sin(angle) * force * (1 - ratio);
+
+        return {
+            center: new Vector(this.player.position.x + dx / 2, this.player.position.y + dy / 2),
+        }
+    } else {
+        return null;
+    }
+}
+
 class Vector {
     constructor(x, y) {
         this.x = x;
@@ -78,6 +99,43 @@ class ScoreEffect {
             ctx.fillText('+1', -5, 3);
             ctx.restore();
         }
+    }
+}
+
+class Explosion {
+    position = new Vector(0, 0);
+    radius = 20;
+    static ANIMATION_DURATION = 50;
+    animation = 0;
+
+    reset(position) {
+        this.animation = Explosion.ANIMATION_DURATION;
+        this.position = position;
+    }
+
+    render(ctx) {
+        ctx.save();
+        if (this.animation) {
+            this.animation -= 1;
+        }
+
+        const gradient = ctx.createRadialGradient(
+            this.position.x,
+            this.position.y,
+            0,
+            this.position.x,
+            this.position.y,
+            this.radius
+        );
+        gradient.addColorStop(easeOut(1 - this.animation / Spike.ANIMATION_DURATION), 'white');
+        gradient.addColorStop(1, 'black');
+
+        ctx.beginPath();
+        ctx.arc(this.position.x, this.position.y, this.radius, 0, 2 * Math.PI);
+        ctx.fillStyle = gradient;
+        ctx.fill();
+        ctx.stroke();
+        ctx.restore();
     }
 }
 
@@ -177,15 +235,30 @@ class Player {
 }
 
 class Controller {
-    static CONFIG = {
+    static KEYBOARD_CONFIG = {
         'ArrowLeft': 'left',
         'ArrowRight': 'right',
     }
+
+    static FOCUS = {
+        mouse: 0,
+        keyboard: 1,
+    }
+
+    focus = Controller.FOCUS.keyboard;
     left = false;
     right = false;
     stickX = 0;
+    mouseX = 0;
+    constructor() {
+        window.addEventListener('mousemove', (e) => this.mouseMove(e.clientX - CANVAS.getBoundingClientRect().x));
+        window.addEventListener('keydown', (e) => this.key(e.key, true));
+        window.addEventListener('keyup', (e) => this.key(e.key, false));
+    }
+
     key(key, down) {
-        const mappedKey = Controller.CONFIG[key]
+        this.focus = Controller.FOCUS.keyboard;
+        const mappedKey = Controller.KEYBOARD_CONFIG[key]
         if (mappedKey) {
             this[mappedKey] = down;
             if (down) {
@@ -198,6 +271,11 @@ class Controller {
                 this.stickX = 0;
             }
         }
+    }
+
+    mouseMove(mouseX) {
+        this.focus = Controller.FOCUS.mouse;
+        this.mouseX = mouseX;
     }
 }
 
@@ -256,8 +334,6 @@ class Game {
     ];
 
     constructor() {
-        window.addEventListener('keydown', (e) => this.controller.key(e.key, true));
-        window.addEventListener('keyup', (e) => this.controller.key(e.key, false));
     }
 
 
@@ -289,11 +365,17 @@ class Game {
             this.score++;
         }
 
-        this.target.x = this.player.position.x;
-        if (this.controller.stickX) {
-            this.target.x = this.player.position.x + (100 * this.controller.stickX);
+        if (this.controller.focus === Controller.FOCUS.keyboard) {
+            this.target.x = this.player.position.x
+            if (this.controller.stickX) {
+                this.target.x = this.player.position.x + (100 * this.controller.stickX);
+                this.player.moveTowardsTarget(this.target);
+            }
+        } else if (this.controller.focus === Controller.FOCUS.mouse) {
+            this.target.x = this.controller.mouseX;
             this.player.moveTowardsTarget(this.target);
         }
+
 
         if (this.hitEffectsCooldown) {
             this.hitEffectsCooldown -= 1;
@@ -309,7 +391,7 @@ class Game {
             if (dist < this.player.radius + spike.radius) {
                 const force = (this.player.radius + spike.radius) - dist;
                 const angle = Math.atan2(dy, dx);
-                const playerVelocityY = -1 * Math.sin(angle) * force
+                const playerVelocityY = -1 * Math.sin(angle) * force;
                 this.player.velocity.x += -1 * Math.cos(angle) * force;
                 this.player.velocity.y += playerVelocityY;
                 spike.velocity.x += Math.cos(angle) * force * 0.1;
