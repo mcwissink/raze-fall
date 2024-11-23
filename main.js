@@ -186,15 +186,17 @@ class Controller {
     stickX = 0;
     key(key, down) {
         const mappedKey = Controller.CONFIG[key]
-        this[mappedKey] = down;
-        if (down) {
-            this.stickX = mappedKey === 'left' ? -1 : 1;
-        } else if (this.left) {
-            this.stickX = -1;
-        } else if (this.right) {
-            this.stickX = 1;
-        } else {
-            this.stickX = 0;
+        if (mappedKey) {
+            this[mappedKey] = down;
+            if (down) {
+                this.stickX = mappedKey === 'left' ? -1 : 1;
+            } else if (this.left) {
+                this.stickX = -1;
+            } else if (this.right) {
+                this.stickX = 1;
+            } else {
+                this.stickX = 0;
+            }
         }
     }
 }
@@ -234,6 +236,7 @@ class Game {
     spikePool = new Pool(Spike, 20);
     gameOver = false;
     hitEffectsCooldown = 0;
+    score = 0;
     hitEffects = [
         new HitEffect(),
         new HitEffect(),
@@ -278,8 +281,12 @@ class Game {
 
     update() {
         this.frameCount++;
-        if (this.frameCount % 10 === 0) {
+        if (!this.gameOver && this.frameCount % 10 === 0) {
             this.spikePool.activate();
+        }
+
+        if (!this.gameOver && this.frameCount % 100 === 0) {
+            this.score++;
         }
 
         this.target.x = this.player.position.x;
@@ -318,6 +325,7 @@ class Game {
                     const scoreEffect = this.scoreEffects.shift();
                     scoreEffect.spawn(hitPosition);
                     this.scoreEffects.push(scoreEffect);
+                    this.score++;
                 }
 
                 const strength = Math.abs(playerVelocityY) * 10;
@@ -377,6 +385,9 @@ class Game {
         this.player.render(ctx);
         this.spikePool.active.forEach((spike) => spike.render(ctx));
         this.scoreEffects.forEach((scoreEffect) => scoreEffect.render(ctx));
+
+        ctx.fillStyle = 'black';
+        ctx.fillText(this.score, 10, 15);
     }
 }
 
