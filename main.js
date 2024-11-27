@@ -11,13 +11,24 @@ const collide = (entityA, entityB, ratio) => {
     if (distance < entityA.radius + entityB.radius) {
         const force = (entityA.radius + entityB.radius) - distance;
         const angle = Math.atan2(dy, dx);
-        entityA.veloctiy.x += Math.cos(angle) * force * ratio;
-        entityA.velocity.y += Math.sin(angle) * force * ratio;
-        entityB.velocity.x += -1 * Math.cos(angle) * force * (1 - ratio);
-        entityB.velocity.y += -1 * Math.sin(angle) * force * (1 - ratio);
+
+        const entityAVelocity = new Vector(
+            Math.cos(angle) * force * ratio,
+            Math.sin(angle) * force * ratio
+        )
+
+        const entityBVelocity = new Vector(
+            -1 * Math.cos(angle) * force * (1 - ratio),
+            -1 * Math.sin(angle) * force * (1 - ratio)
+        )
+
+        entityA.velocity.add(entityAVelocity);
+        entityB.velocity.add(entityBVelocity);
 
         return {
-            center: new Vector(this.player.position.x + dx / 2, this.player.position.y + dy / 2),
+            entityAVelocity,
+            entityBVelocity,
+            contactPosition: new Vector(entityA.position.x - dx / 2, entityA.position.y - dy / 2),
         }
     } else {
         return null;
@@ -28,6 +39,16 @@ class Vector {
     constructor(x, y) {
         this.x = x;
         this.y = y;
+    }
+
+    add(vector) {
+        this.x += vector.x;
+        this.y += vector.y;
+    }
+
+    scale(magnitueX, magnitudeY) {
+        this.x *= magnitueX;
+        this.y *= magnitudeY ? magnitudeY : magnitueX;
     }
 }
 
@@ -50,10 +71,8 @@ class HitEffect {
     }
 
     update() {
-        this.velocity.x *= this.friction;
-        this.velocity.y *= this.friction;
-        this.position.x += this.velocity.x;
-        this.position.y += this.velocity.y;
+        this.velocity.scale(this.friction);
+        this.position.add(this.velocity);
     }
 
     render(ctx) {
@@ -168,9 +187,8 @@ class Spike {
     }
 
     update() {
-        this.velocity.x *= this.friction;
-        this.position.x += this.velocity.x;
-        this.position.y += this.velocity.y;
+        this.velocity.scale(this.friction, 1);
+        this.position.add(this.velocity);
     }
 
     render(ctx) {
@@ -203,8 +221,8 @@ class Spike {
 class Player {
     radius = 20;
     maxSpeed = 100;
-    friction = 0.8;
-    acceleration = 10;
+    friction = 0.85;
+    acceleration = 2;
     velocity = new Vector(0, 0);
 
     constructor(position) {
@@ -215,14 +233,12 @@ class Player {
         const difference = target.x - this.position.x;
         const direction = Math.sign(difference);
         // find distance between target and position
-        this.velocity.x = Math.min(Math.abs(difference), this.acceleration) * direction;
+        this.velocity.x += Math.min(Math.abs(difference), this.acceleration) * direction;
     }
 
     update() {
-        this.velocity.x *= this.friction;
-        this.velocity.y *= this.friction;
-        this.position.x += this.velocity.x;
-        this.position.y += this.velocity.y;
+        this.velocity.scale(this.friction);
+        this.position.add(this.velocity);
     }
 
     render(ctx) {
@@ -334,9 +350,6 @@ class Game {
         new ScoreEffect(),
     ];
 
-    constructor() {
-    }
-
 
     start() {
         window.requestAnimationFrame(this.animation);
@@ -384,38 +397,25 @@ class Game {
 
         this.spikePool.active.forEach((spike) => {
             spike.update()
-
-            const dx = (spike.position.x - this.player.position.x);
-            const dy = (spike.position.y - this.player.position.y);
-            const dist = Math.sqrt(dx * dx + dy * dy);
-
-            if (dist < this.player.radius + spike.radius) {
-                const force = (this.player.radius + spike.radius) - dist;
-                const angle = Math.atan2(dy, dx);
-                const playerVelocityY = -1 * Math.sin(angle) * force;
-                this.player.velocity.x += -1 * Math.cos(angle) * force;
-                this.player.velocity.y += playerVelocityY;
-                spike.velocity.x += Math.cos(angle) * force * 0.1;
-                spike.velocity.y += Math.sin(angle) * force * 0.1;
-
-                const hitPosition = new Vector(this.player.position.x + dx / 2, this.player.position.y + dy / 2);
-                const isPositiveHit = playerVelocityY < 0;
+            const result = collide(this.player, spike, 0.9);
+            if (result) {
+                const isPositiveHit = result.entityAVelocity.y < 0;
                 const color = isPositiveHit ? 'green' : 'red';
                 spike.hit(color);
 
                 if (isPositiveHit && !spike.scored) {
                     spike.scored = true;
                     const scoreEffect = this.scoreEffects.shift();
-                    scoreEffect.spawn(hitPosition);
+                    scoreEffect.spawn(result.contactPosition);
                     this.scoreEffects.push(scoreEffect);
                     this.score++;
                 }
 
-                const strength = Math.abs(playerVelocityY) * 10;
+                const strength = Math.abs(result.entityAVelocity.y) * 10;
                 if (strength > this.hitEffectsCooldown) {
                     const hitEffect = this.hitEffects.shift();
                     hitEffect.spawn(
-                        hitPosition,
+                        result.contactPosition,
                         new Vector(this.player.velocity.x, this.player.velocity.y),
                         color,
                         strength
