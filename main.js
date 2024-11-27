@@ -232,8 +232,7 @@ class Player {
     moveTowardsTarget(target) {
         const difference = target.x - this.position.x;
         const direction = Math.sign(difference);
-        // find distance between target and position
-        this.velocity.x += Math.min(Math.abs(difference), this.acceleration) * direction;
+        this.velocity.x += Math.min(Math.abs(difference / 30), this.acceleration) * direction;
     }
 
     update() {
