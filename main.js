@@ -9,7 +9,7 @@ const collide = (entityA, entityB, ratio) => {
     const distance = Math.sqrt(dx * dx + dy * dy);
 
     if (distance < entityA.radius + entityB.radius) {
-        const force = (entityA.radius + entityB.radius) - distance;
+        const force = ((entityA.radius + entityB.radius) - distance) * 2;
         const angle = Math.atan2(dy, dx);
 
         const entityAVelocity = new Vector(
@@ -122,17 +122,25 @@ class ScoreEffect {
 }
 
 class Explosion {
+    hitEffect = new HitEffect();
     position = new Vector(0, 0);
-    radius = 20;
-    static ANIMATION_DURATION = 50;
+    velocity = new Vector(0, 0);
+    radius = 0;
+    static ANIMATION_DURATION = 10;
     animation = 0;
 
     reset(position) {
         this.animation = Explosion.ANIMATION_DURATION;
         this.position = position;
+        this.hitEffect.spawn(this.position, this.velocity, 'black', 70);
+    }
+
+    update() {
+        this.radius = this.animation * 18;
     }
 
     render(ctx) {
+        this.hitEffect.render(ctx);
         ctx.save();
         if (this.animation) {
             this.animation -= 1;
@@ -146,7 +154,7 @@ class Explosion {
             this.position.y,
             this.radius
         );
-        gradient.addColorStop(easeOut(1 - this.animation / Spike.ANIMATION_DURATION), 'white');
+        gradient.addColorStop(easeOut(1 - this.animation / Explosion.ANIMATION_DURATION), 'white');
         gradient.addColorStop(1, 'black');
 
         ctx.beginPath();
@@ -161,7 +169,8 @@ class Explosion {
 class Spike {
     scored = false;
     position = new Vector(0, 0);
-    velocity = new Vector(0, 5);
+    velocity = new Vector(0, 0);
+    targetVelocity = 0;
     radius = 20;
     friction = 0.8;
 
@@ -178,7 +187,8 @@ class Spike {
         this.radius = Spike.MIN_RADIUS + Math.random() * (Spike.MAX_RADIUS - Spike.MIN_RADIUS);
         this.position.x = Math.random() * CANVAS.width;
         this.position.y = -this.radius;
-        this.velocity.y = Math.random() * Spike.MAX_SPAWN_VELOCITY;
+        this.targetVelocity = Math.random() * Spike.MAX_SPAWN_VELOCITY;
+        this.velocity.y = this.targetVelocity;
     }
 
     hit(color) {
@@ -187,7 +197,7 @@ class Spike {
     }
 
     update() {
-        this.velocity.scale(this.friction, 1);
+        this.velocity.scale(this.friction, Math.abs(this.velocity.y) > Math.abs(this.targetVelocity) ? this.friction : 1);
         this.position.add(this.velocity);
     }
 
@@ -302,6 +312,7 @@ class Pool {
         this.size = size;
         this.entity = entity;
     }
+
     activate() {
         if (this.inactive.length) {
             const entity = this.inactive.pop();
@@ -336,13 +347,10 @@ class Game {
         new HitEffect(),
         new HitEffect(),
     ];
-    deathEffects = [
-        new HitEffect(),
-        new HitEffect(),
-        new HitEffect(),
-        new HitEffect(),
-        new HitEffect(),
-    ];
+    explosions = [
+        new Explosion(),
+        new Explosion(),
+    ]
     scoreEffects = [
         new ScoreEffect(),
         new ScoreEffect(),
@@ -393,6 +401,12 @@ class Game {
         if (this.hitEffectsCooldown) {
             this.hitEffectsCooldown -= 1;
         }
+
+        this.explosions.forEach((explosion) => {
+            explosion.update();
+            collide(explosion, this.player, 0.94);
+            this.spikePool.active.forEach((spike) => collide(explosion, spike, 0.94));
+        });
 
         this.spikePool.active.forEach((spike) => {
             spike.update()
@@ -447,26 +461,18 @@ class Game {
 
         if (!this.gameOver && this.player.position.y - this.player.radius > CANVAS.height) {
             this.gameOver = true;
-            this.deathEffects.forEach((deathEffect, index) => {
-                deathEffect.spawn(
-                    new Vector(this.player.position.x, this.player.position.y),
-                    new Vector(0, 0),
-                    'black',
-                    50 * index,
-                );
-            });
+            this.explosions[0].reset(new Vector(this.player.position.x, this.player.position.y));
         }
 
         this.hitEffects.forEach((hitEffect) => hitEffect.update());
-        this.deathEffects.forEach((deathEffect) => deathEffect.update());
     }
 
     render(ctx) {
         this.hitEffects.forEach((hitEffect) => hitEffect.render(ctx));
-        this.deathEffects.forEach((deathEffects) => deathEffects.render(ctx));
         this.player.render(ctx);
         this.spikePool.active.forEach((spike) => spike.render(ctx));
         this.scoreEffects.forEach((scoreEffect) => scoreEffect.render(ctx));
+        this.explosions.forEach((explosion) => explosion.render(ctx));
 
         ctx.fillStyle = 'black';
         ctx.fillText(this.score, 10, 15);
