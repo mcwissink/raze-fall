@@ -28,7 +28,12 @@ const collide = (entityA, entityB, ratio) => {
         return {
             entityAVelocity,
             entityBVelocity,
-            contactPosition: new Vector(entityA.position.x - dx / 2, entityA.position.y - dy / 2),
+            contactPosition: entityA.position
+                .copy()
+                .subtract(entityB.position)
+                .normalize()
+                .scale(-entityA.radius)
+                .add(entityA.position)
         }
     } else {
         return null;
@@ -44,11 +49,30 @@ class Vector {
     add(vector) {
         this.x += vector.x;
         this.y += vector.y;
+        return this;
+    }
+
+    subtract(vector) {
+        this.x -= vector.x;
+        this.y -= vector.y;
+        return this;
     }
 
     scale(magnitueX, magnitudeY) {
         this.x *= magnitueX;
         this.y *= magnitudeY ? magnitudeY : magnitueX;
+        return this;
+    }
+
+    normalize() {
+        const magnitude = Math.hypot(this.x, this.y) || 1;
+        this.x = this.x / magnitude;
+        this.y = this.y / magnitude;
+        return this;
+    };
+
+    copy() {
+        return new Vector(this.x, this.y);
     }
 }
 
@@ -229,7 +253,7 @@ class Spike {
 }
 
 class Player {
-    radius = 20;
+    radius = 25;
     maxSpeed = 100;
     friction = 0.85;
     acceleration = 2;
@@ -431,7 +455,7 @@ class Game {
                         result.contactPosition,
                         new Vector(this.player.velocity.x, this.player.velocity.y),
                         color,
-                        strength
+                        Math.max(strength, 10)
                     );
                     this.hitEffects.push(hitEffect);
                     this.hitEffectsCooldown = Math.round(strength);
