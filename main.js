@@ -1,7 +1,16 @@
 const CANVAS = document.querySelector('canvas');
 const CTX = CANVAS.getContext('2d');
 
+const FRAMES_PER_SECOND = 60;
+const POINTS_PER_SECOND = 1;
+const POINTS_PER_HIT = 1;
+
 const easeOut = (t, exponent = 5) => 1 - Math.pow(1 - t, exponent);
+
+const fillTextCenter = (ctx, text) => {
+    const measuredText = ctx.measureText(text);
+    ctx.fillText(text, -measuredText.actualBoundingBoxRight / 2, measuredText.actualBoundingBoxAscent / 2);
+}
 
 const collide = (entityA, entityB, ratio) => {
     const dx = entityA.position.x - entityB.position.x;
@@ -77,7 +86,7 @@ class Vector {
 }
 
 class HitEffect {
-    static ANIMATION_DURATION = 15;
+    static ANIMATION_DURATION = 20;
 
     position = new Vector(0, 0);
     velocity = new Vector(0, 0);
@@ -130,14 +139,16 @@ class ScoreEffect {
 
     position = new Vector(0, 0);
     animation = 0;
+    score = 0;
 
     constructor(game) {
         this.game = game;
     }
 
-    spawn(position) {
+    spawn(position, score) {
         this.animation = ScoreEffect.ANIMATION_DURATION;
         this.position = position;
+        this.score = score;
     }
 
     update() {
@@ -149,6 +160,7 @@ class ScoreEffect {
     render(ctx) {
         ctx.save();
         ctx.translate(this.position.x, this.position.y + easeOut(this.animation / ScoreEffect.ANIMATION_DURATION, 2) * 10);
+
         ctx.beginPath();
         ctx.fillStyle = 'white';
         ctx.strokeStyle = 'black';
@@ -156,7 +168,7 @@ class ScoreEffect {
         ctx.fill();
         ctx.stroke();
         ctx.fillStyle = 'black';
-        ctx.fillText('+1', -5, 3);
+        fillTextCenter(ctx, `+${this.score}`);
         ctx.restore();
     }
 }
@@ -188,20 +200,14 @@ class Explosion {
 
     render(ctx) {
         ctx.save();
+        ctx.translate(this.position.x, this.position.y);
 
-        const gradient = ctx.createRadialGradient(
-            this.position.x,
-            this.position.y,
-            0,
-            this.position.x,
-            this.position.y,
-            this.radius
-        );
+        const gradient = ctx.createRadialGradient(0, 0, 0, 0, 0, this.radius)
         gradient.addColorStop(easeOut(1 - this.animation / Explosion.ANIMATION_DURATION), 'white');
         gradient.addColorStop(1, 'black');
 
         ctx.beginPath();
-        ctx.arc(this.position.x, this.position.y, this.radius, 0, 2 * Math.PI);
+        ctx.arc(0, 0, this.radius, 0, 2 * Math.PI);
         ctx.fillStyle = gradient;
         ctx.fill();
         ctx.stroke();
@@ -223,6 +229,7 @@ class Spike {
     friction = 0.8;
     animation = 0;
     color = 'black';
+    multiplier = 1;
 
     constructor(game) {
         this.game = game;
@@ -237,6 +244,12 @@ class Spike {
         this.position.y = -this.radius;
         this.targetVelocity = Math.random() * Spike.MAX_SPAWN_VELOCITY;
         this.velocity.y = this.targetVelocity;
+
+        const spikesWithMultiplier = this.game.spikePool.active.filter((spike) => spike.multiplier > 1);
+        if (Math.random() > 0.9 && spikesWithMultiplier.length < 2) {
+            this.multiplier = 2;
+        }
+
     }
 
     hit(color) {
@@ -250,29 +263,36 @@ class Spike {
         if (this.animation && !--this.animation) {
             this.color = 'black';
         }
+
+        if (this.position.y - this.radius > CANVAS.height + 10) {
+            this.game.spikePool.despawn(this);
+        }
+
+        if (this.position.y + this.radius < -10) {
+            this.game.spikePool.despawn(this);
+        }
     }
 
     render(ctx) {
         ctx.save();
+        ctx.translate(this.position.x, this.position.y);
         ctx.strokeStyle = this.color;
 
-        const gradient = ctx.createRadialGradient(
-            this.position.x,
-            this.position.y,
-            0,
-            this.position.x,
-            this.position.y,
-            this.radius
-        );
+        const gradient = ctx.createRadialGradient(0, 0, 0, 0, 0, this.radius)
 
         gradient.addColorStop(easeOut(1 - this.animation / Spike.ANIMATION_DURATION), 'white');
         gradient.addColorStop(1, this.color);
 
         ctx.beginPath();
-        ctx.arc(this.position.x, this.position.y, this.radius, 0, 2 * Math.PI);
+        ctx.arc(0, 0, this.radius, 0, 2 * Math.PI);
         ctx.fillStyle = gradient;
         ctx.fill();
         ctx.stroke();
+
+        if (this.multiplier > 1) {
+            ctx.fillStyle = 'black';
+            fillTextCenter(ctx, `x${this.multiplier}`);
+        }
         ctx.restore();
     }
 }
@@ -417,7 +437,7 @@ class Game {
     }
 
     animation = (time) => {
-        const frameInterval = 1000 / 60;
+        const frameInterval = 1000 / FRAMES_PER_SECOND;
         while (time - frameInterval > this.previousTime) {
             this.previousTime += frameInterval;
 
@@ -432,12 +452,10 @@ class Game {
 
     update() {
         this.frameCount++;
+        this.score += POINTS_PER_SECOND / FRAMES_PER_SECOND;
+
         if (!this.gameOver && this.frameCount % 10 === 0) {
             this.spikePool.spawn();
-        }
-
-        if (!this.gameOver && this.frameCount % 100 === 0) {
-            this.score++;
         }
 
         if (this.hitEffectsCooldown) {
@@ -471,8 +489,9 @@ class Game {
 
                 if (isPositiveHit && !spike.scored) {
                     spike.scored = true;
-                    this.scoreEffectPool.spawn(result.contactPosition);
-                    this.score++;
+                    const score = 1 * spike.multiplier;
+                    this.scoreEffectPool.spawn(result.contactPosition, score);
+                    this.score += score;
                 }
 
                 const strength = Math.abs(result.entityAVelocity.y) * 10;
@@ -485,14 +504,6 @@ class Game {
                     );
                     this.hitEffectsCooldown = 5;
                 }
-            }
-
-            if (spike.position.y - spike.radius > CANVAS.height + 10) {
-                this.spikePool.despawn(spike);
-            }
-
-            if (spike.position.y + spike.radius < -10) {
-                this.spikePool.despawn(spike);
             }
         });
 
@@ -514,7 +525,7 @@ class Game {
         this.scoreEffectPool.active.forEach((scoreEffect) => scoreEffect.render(ctx));
 
         ctx.fillStyle = 'black';
-        ctx.fillText(this.score, 10, 15);
+        ctx.fillText(this.score.toFixed(0), 10, 15);
     }
 }
 
