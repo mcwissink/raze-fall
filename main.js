@@ -218,7 +218,7 @@ class Explosion {
 class Spike {
     static MAX_SPAWN_VELOCITY = 10;
     static MAX_RADIUS = 40;
-    static MIN_RADIUS = 10;
+    static MIN_RADIUS = 15;
     static ANIMATION_DURATION = 50;
 
     scored = false;
@@ -357,8 +357,14 @@ class Controller {
     stickX = 0;
     mouseX = 0;
     constructor() {
-        window.addEventListener('mousemove', (e) => this.mouseMove(e.clientX - CANVAS.getBoundingClientRect().x));
-        window.addEventListener('touchmove', (e) => this.mouseMove(e.touches[0].clientX - CANVAS.getBoundingClientRect().x));
+        window.addEventListener('mousemove', (e) => {
+            e.preventDefault();
+            this.mouseMove(e.clientX - CANVAS.getBoundingClientRect().x);
+        });
+        window.addEventListener('touchmove', (e) => {
+            e.preventDefault();
+            this.mouseMove(e.touches[0].clientX - CANVAS.getBoundingClientRect().x)
+        }, { passive: false });
         window.addEventListener('keydown', (e) => this.key(e.key, true));
         window.addEventListener('keyup', (e) => this.key(e.key, false));
     }
