@@ -1,4 +1,8 @@
 const CANVAS = document.querySelector('canvas');
+const size = Math.ceil(Math.min(window.innerHeight, window.innerWidth) * .8);
+CANVAS.width = size;
+CANVAS.height = size;
+
 const CTX = CANVAS.getContext('2d');
 
 const FRAMES_PER_SECOND = 60;
@@ -240,7 +244,7 @@ class Spike {
         this.color = 'black';
         this.animation = 0;
         this.radius = Spike.MIN_RADIUS + Math.random() * (Spike.MAX_RADIUS - Spike.MIN_RADIUS);
-        this.position.x = Math.random() * CANVAS.width;
+        this.position.x = Math.random() * this.game.width;
         this.position.y = -this.radius;
         this.targetVelocity = Math.random() * Spike.MAX_SPAWN_VELOCITY;
         this.velocity.y = this.targetVelocity;
@@ -264,7 +268,7 @@ class Spike {
             this.color = 'black';
         }
 
-        if (this.position.y - this.radius > CANVAS.height + 10) {
+        if (this.position.y - this.radius > this.game.height + 10) {
             this.game.spikePool.despawn(this);
         }
 
@@ -319,8 +323,8 @@ class Player {
         this.velocity.scale(this.friction);
         this.position.add(this.velocity);
 
-        if (this.position.x + this.radius > CANVAS.width) {
-            this.position.x = CANVAS.width - this.radius;
+        if (this.position.x + this.radius > this.game.width) {
+            this.position.x = this.game.width - this.radius;
             this.velocity.x *= -1;
         }
 
@@ -421,6 +425,8 @@ class Pool {
 }
 
 class Game {
+    width = 500;
+    height = 500;
     previousTime = 0;
     frameCount = 0;
     target = new Vector(0, 0);
@@ -446,10 +452,7 @@ class Game {
         const frameInterval = 1000 / FRAMES_PER_SECOND;
         while (time - frameInterval > this.previousTime) {
             this.previousTime += frameInterval;
-
             this.update(time);
-            CTX.fillStyle = "rgba(255, 255, 255, 1)";
-            CTX.fillRect(0, 0, CANVAS.width, CANVAS.height);
             this.render(CTX);
         }
 
@@ -517,13 +520,18 @@ class Game {
         this.hitEffectPool.active.forEach((hitEffect) => hitEffect.update());
         this.scoreEffectPool.active.forEach((scoreEffect) => scoreEffect.update());
 
-        if (!this.gameOver && this.player.position.y - this.player.radius > CANVAS.height) {
+        if (!this.gameOver && this.player.position.y - this.player.radius > this.height) {
             this.gameOver = true;
             this.explosionPool.spawn(new Vector(this.player.position.x, this.player.position.y));
         }
     }
 
     render(ctx) {
+        ctx.save();
+        ctx.scale(CANVAS.width / this.width, CANVAS.height / this.height);
+        ctx.fillStyle = "white";
+        ctx.fillRect(0, 0, this.width, this.height);
+
         this.explosionPool.active.forEach((explosion) => explosion.render(ctx));
         this.hitEffectPool.active.forEach((hitEffect) => hitEffect.render(ctx));
         this.player.render(ctx);
@@ -532,6 +540,7 @@ class Game {
 
         ctx.fillStyle = 'black';
         ctx.fillText(this.score.toFixed(0), 10, 15);
+        ctx.restore();
     }
 }
 
