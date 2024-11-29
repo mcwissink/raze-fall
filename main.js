@@ -461,10 +461,17 @@ class Game {
 
     update() {
         this.frameCount++;
-        this.score += POINTS_PER_SECOND / FRAMES_PER_SECOND;
+        if (!this.gameOver) {
+            this.score += POINTS_PER_SECOND / FRAMES_PER_SECOND;
 
-        if (!this.gameOver && this.frameCount % 10 === 0) {
-            this.spikePool.spawn();
+            if (this.frameCount % 10 === 0) {
+                this.spikePool.spawn();
+            }
+
+            if (this.player.position.y - this.player.radius > this.height) {
+                this.gameOver = true;
+                this.explosionPool.spawn(new Vector(this.player.position.x, this.player.position.y));
+            }
         }
 
         if (this.hitEffectsCooldown) {
@@ -519,17 +526,12 @@ class Game {
         this.player.update();
         this.hitEffectPool.active.forEach((hitEffect) => hitEffect.update());
         this.scoreEffectPool.active.forEach((scoreEffect) => scoreEffect.update());
-
-        if (!this.gameOver && this.player.position.y - this.player.radius > this.height) {
-            this.gameOver = true;
-            this.explosionPool.spawn(new Vector(this.player.position.x, this.player.position.y));
-        }
     }
 
     render(ctx) {
         ctx.save();
         ctx.scale(CANVAS.width / this.width, CANVAS.height / this.height);
-        ctx.fillStyle = "white";
+        ctx.fillStyle = 'white';
         ctx.fillRect(0, 0, this.width, this.height);
 
         this.explosionPool.active.forEach((explosion) => explosion.render(ctx));
