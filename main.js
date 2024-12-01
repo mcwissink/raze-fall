@@ -360,14 +360,15 @@ class Controller {
     right = false;
     stickX = 0;
     mouseX = 0;
-    constructor() {
+    constructor(game) {
+        this.game = game;
         window.addEventListener('mousemove', (e) => {
             e.preventDefault();
-            this.mouseMove(e.clientX - CANVAS.getBoundingClientRect().x);
+            this.mouseMove(e.clientX);
         });
         window.addEventListener('touchmove', (e) => {
             e.preventDefault();
-            this.mouseMove(e.touches[0].clientX - CANVAS.getBoundingClientRect().x)
+            this.mouseMove(e.touches[0].clientX);
         }, { passive: false });
         window.addEventListener('keydown', (e) => this.key(e.key, true));
         window.addEventListener('keyup', (e) => this.key(e.key, false));
@@ -391,8 +392,9 @@ class Controller {
     }
 
     mouseMove(mouseX) {
+        const { x, width } = CANVAS.getBoundingClientRect();
+        this.mouseX = (mouseX - x) * (this.game.width / width);
         this.focus = Controller.FOCUS.mouse;
-        this.mouseX = mouseX;
     }
 }
 
@@ -430,12 +432,12 @@ class Game {
     previousTime = 0;
     frameCount = 0;
     target = new Vector(0, 0);
-    controller = new Controller();
     gameOver = false;
     hitEffectsCooldown = 0;
     score = 0;
 
     constructor() {
+        this.controller = new Controller(this);
         this.explosionPool = new Pool(this, Explosion, 5);
         this.scoreEffectPool = new Pool(this, ScoreEffect, 5);
         this.hitEffectPool = new Pool(this, HitEffect, 5);
